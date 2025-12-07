@@ -1,0 +1,2238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoML Studio</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- PapaParse for robust CSV parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+    <!-- <link rel="stylesheet" href="style.css">  -->
+    <!-- To this: -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+</head>
+<body>
+    <header>
+        <div class="logo">A</div>
+        <div>
+            <div class="title">AutoML Studio</div>
+            <div class="sub">No-code ML: upload → detect → train → deploy</div>
+        </div>
+        <div class="header-nav">
+            <a href="#frontend/dataset.html">Data & Training</a>
+            <a href="scenario-metadata.html">Scenario & Metadata</a>
+            <a href="logs-results.html">Logs & Results</a>
+        </div>
+    </header>
+
+    <main class="wizard-container">
+        <!-- Progress Indicator -->
+        <div class="progress-tracker">
+            <div class="step active" data-step="1">
+                <div class="step-number">1</div>
+                <span>Data & Setup</span>
+            </div>
+            <div class="step" data-step="2">
+                <div class="step-number">2</div>
+                <span>Scenario & Training</span>
+            </div>
+            <div class="step" data-step="3">
+                <div class="step-number">3</div>
+                <span>Results & Deployment</span>
+            </div>
+        </div>
+
+        <!-- Section 1: Data & Setup -->
+        <section id="step-1" class="wizard-step active">
+            <div class="step-header">
+                <h2>📊 Upload & Configure Your Data</h2>
+                <p>Start by uploading your dataset and defining the machine learning problem</p>
+            </div>
+            
+            <div class="card data-upload-card">
+                <h3>Dataset Upload</h3>
+                <div class="content">
+                    <div class="dropzone" id="dropzone">
+                        <input type="file" id="fileInput" accept=".csv" hidden />
+                        <p><strong>Drag & drop</strong> your CSV here or <a href="#" id="browse">browse</a></p>
+                        <p class="hint">Max ~50MB. First 5,000 rows previewed client-side.</p>
+                    </div>
+                    
+                    <div class="row">
+                        <div style="flex:1">
+                            <label for="targetSelect">Target Column</label>
+                            <select id="targetSelect" disabled>
+                                <option value="">Select target...</option>
+                            </select>
+                        </div>
+                        <div style="flex:1">
+                            <label for="problemType">Problem Type (auto-detected)</label>
+                            <select id="problemType" disabled>
+                                <option value="">--</option>
+                                <option value="classification">Classification</option>
+                                <option value="regression">Regression</option>
+                                <option value="clustering">Clustering</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="kpis" id="dataKpis" style="display:none">
+                        <div class="kpi">
+                            <div class="label">Rows</div>
+                            <div class="value" id="kpiRows">0</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="label">Columns</div>
+                            <div class="value" id="kpiCols">0</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="label">Missing %</div>
+                            <div class="value" id="kpiMissing">0%</div>
+                        </div>
+                        <div class="kpi">
+                            <div class="label">Numeric Cols</div>
+                            <div class="value" id="kpiNumeric">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <span class="badge" id="fileBadge">No file loaded</span>
+                        <span class="badge" id="detectBadge">Not detected</span>
+                        <span class="badge" id="qualityBadge">--</span>
+                    </div>
+                    
+                    <div class="row" id="previewWrap" style="display:none">
+                        <div class="table-wrap">
+                            <table id="previewTable"></table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="step-actions">
+                <div></div> <!-- Spacer for flex alignment -->
+                <button class="btn-next" onclick="nextStep(2)">Continue to Scenario Setup →</button>
+                
+            </div>
+        </section>
+
+        <!-- Section 2: Scenario & Training -->
+        <section id="step-2" class="wizard-step">
+            <div class="step-header">
+                <h2>🎯 Define Your ML Scenario</h2>
+                <p>Configure your problem domain and training parameters</p>
+            </div>
+            
+            <div class="scenario-config-grid">
+                <div class="card">
+                    <h3>Problem Context</h3>
+                    <div class="content">
+                        <div class="row">
+                            <div style="flex:1">
+                                <label for="scenario">Scenario</label>
+                                <input type="text" id="scenario" placeholder="e.g., Predict churn for subscription app" />
+                                <div id="scenarioFeedback" class="hint"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div style="flex:1">
+                                <label for="domain">Domain</label>
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <input type="text" id="domain" placeholder="e.g., SaaS / Retail / Finance" style="flex:1;"/>
+                                    <button id="editDomain" class="ghost" style="display:none; padding:4px 8px; font-size:0.8rem;">Edit</button>
+                                </div>
+                                <div id="domainSuggest" style="margin-top:6px;">
+                                    <span id="suggestedDomain"></span>
+                                    <button id="thumbUp" style="display:none;">👍</button>
+                                    <button id="thumbDown" style="display:none;">👎</button>
+                                </div>
+                                <div id="alternativeDomains" style="display:none; margin-top:8px;"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div style="flex:1">
+                                <label for="notes">Notes (optional)</label>
+                                <textarea id="notes" rows="3" placeholder="Anything helpful about the dataset"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Training Configuration</h3>
+                    <div class="content">
+                        <div class="row">
+                            <div style="flex:1">
+                                <label for="targetSelect2">Target Column</label>
+                                <select id="targetSelect2" disabled>
+                                    <option value="">Select target...</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div style="flex:1">
+                                <label for="problemType2">Problem Type</label>
+                                <select id="problemType2" disabled>
+                                    <option value="">--</option>
+                                    <option value="classification">Classification</option>
+                                    <option value="regression">Regression</option>
+                                    <option value="clustering">Clustering</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div style="flex:1">
+                                <label for="missingStrategy">Missing Values Strategy</label>
+                                <select id="missingStrategy">
+                                    <option value="auto">Auto (mean for numbers, mode for text)</option>
+                                    <option value="drop">Drop rows with missing values</option>
+                                    <option value="mean_mode">Fill: mean (numeric), mode (categorical)</option>
+                                    <option value="median_mode">Fill: median (numeric), mode (categorical)</option>
+                                    <option value="constant">Fill with constant (0 for numeric, "Unknown" for categorical)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Advanced Options</h3>
+                    <div class="content">
+                        <div class="row">
+                            <div style="flex:1">
+                                <label>API Base URL</label>
+                                <input id="apiBase" type="text" placeholder="http://127.0.0.1:5500" value="http://127.0.0.1:5500"/>
+                            </div>
+                            <div style="width:160px; align-self:flex-end" class="actions">
+                                <button id="pingBtn" class="ghost">Ping API</button>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div style="flex:1">
+                                <label>Training Time Budget (minutes)</label>
+                                <input type="number" id="timeBudget" min="1" max="60" value="5" />
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div style="flex:1">
+                                <label>Cross-Validation Folds</label>
+                                <select id="cvFolds">
+                                    <option value="3">3 folds</option>
+                                    <option value="5" selected>5 folds</option>
+                                    <option value="10">10 folds</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="step-actions">
+                <button class="btn-prev" onclick="prevStep()">← Back</button>
+                <button id="trainBtn" class="btn-train" disabled>🚀 Train Model</button>
+            </div>
+        </section>
+
+        <!-- Section 3: Results & Deployment -->
+        <section id="step-3" class="wizard-step">
+            <div class="step-header">
+                <h2>🚀 Model Results & Deployment</h2>
+                <p>Analyze your model performance and deploy for predictions</p>
+            </div>
+            
+            <div class="results-dashboard">
+                <div class="card model-performance">
+                    <h3>Model Performance</h3>
+                    <div class="content">
+                        <div class="kpis">
+                            <div class="kpi" style="width:100%">
+                                <div class="label">Best Model</div>
+                                <div class="value" id="bestModel">--</div>
+                            </div>
+                            <div class="kpi">
+                                <div class="label">Metric</div>
+                                <div class="value" id="bestMetric">--</div>
+                            </div>
+                            <div class="kpi">
+                                <div class="label">Model ID</div>
+                                <div class="value" id="modelId">--</div>
+                            </div>
+                            <div class="kpi">
+                                <div class="label">API Key</div>
+                                <div class="value" id="apiKey">--</div>
+                            </div>
+                        </div>
+                        
+                        <div class="log" id="logBox">Ready. Configure the API base URL below, then upload a CSV.</div>
+                    </div>
+                </div>
+                
+                <div class="card deployment-options">
+                    <h3>Deployment Options</h3>
+                    <div class="content">
+                        <div class="row actions">
+                            <a id="downloadLink" class="badge" href="#" download style="display:none">Download model file</a>
+                            <button id="copyCurl" class="ghost" disabled>Copy predict cURL</button>
+                        </div>
+                        
+                        <div id="modelTabs" style="display:none; margin-top:20px;">
+                            <div class="tabs">
+                                <div class="tab active" data-tab="predict">Predict</div>
+                                <div class="tab" data-tab="model-info">Model Info</div>
+                                <div class="tab" data-tab="data">Data</div>
+                                <div class="tab" data-tab="api">API</div>
+                                <div class="tab" data-tab="whitebox">Whitebox</div>
+                            </div>
+                            
+                            <div class="tab-content active" id="tab-predict">
+                                <form id="predictForm"></form>
+                                <button id="predictBtn">Predict</button>
+                                <div id="predictResult" style="margin-top:10px; font-weight:bold;">Waiting for a prediction</div>
+                            </div>
+                            
+                            <div class="tab-content" id="tab-model-info">
+                                <div><strong>Feature Names:</strong> <span id="modelFeatures"></span></div>
+                                <div><strong>Target:</strong> <span id="modelTarget"></span></div>
+                                <div><strong>Feature Importance:</strong>
+                                    <ul id="featureImportance"></ul>
+                                </div>
+                                <div><strong>Algorithm:</strong> <span id="modelAlgorithm"></span></div>
+                                <div><strong>Model Size:</strong> <span id="modelSize"></span></div>
+                                <div><strong>Learn size:</strong> 80%</div>
+                                <div><strong>Test size:</strong> 20%</div>
+                            </div>
+                            
+                            <div class="tab-content" id="tab-data">
+                                <button id="downloadDataset">Download Dataset</button>
+                                <div id="dataPreview"></div>
+                            </div>
+                            
+                            <div class="tab-content" id="tab-api">
+                                <pre id="apiExample"></pre>
+                            </div>
+                            
+                            <div class="tab-content" id="tab-whitebox">
+                                <div id="whiteboxHelp" class="hint" style="margin-bottom:10px;">
+                                    This shows each algorithm evaluated during training and its validation score. The best model is highlighted.
+                                </div>
+                                <div id="leaderboardList" class="leaderboard"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button onclick="testWhitebox()" style="position: fixed; bottom: 10px; right: 10px; z-index: 1000;">
+                Test Whitebox
+            </button>
+            <div class="step-actions">
+                <button class="btn-prev" onclick="prevStep()">← Back to Training</button>
+                <button class="btn-advance" onclick="goToAdvanced()">🔄 Advanced Tuning</button>
+            </div>
+        </section>
+        
+        <p class="footer-note">
+            AutoML Studio
+            <!-- Frontend only. Expects a Flask backend with endpoints:
+            <code>/api/ping</code>, <code>/api/metadata</code>, <code>/api/detect</code>, <code>/api/train</code>, <code>/api/model/&lt;id&gt;/download</code>, <code>/api/predict</code>. -->
+        </p>
+
+
+
+        <!-- Loader Overlay -->
+        <div id="loaderOverlay" class="loader-overlay">
+            <div class="loader-container">
+                <!-- Animated Loader -->
+                <div class="loader">
+                    <div class="loader-circle"></div>
+                    <div class="loader-circle"></div>
+                    <div class="loader-circle"></div>
+                </div>
+                
+                <!-- Title and Message -->
+                <h3 class="loader-title" id="loaderTitle">Training Model</h3>
+                <p class="loader-message" id="loaderMessage">
+                    Please wait while we train your machine learning model. 
+                    This may take a few moments...
+                </p>
+                
+                <!-- Progress Bar -->
+                <div class="loader-progress">
+                    <div class="loader-progress-bar" id="loaderProgress"></div>
+                </div>
+                
+                <!-- Status Indicator -->
+                <div class="text-muted" id="loaderStatus">
+                    Initializing training process...
+                </div>
+                
+                <!-- Status Log -->
+                <div class="loader-log" id="loaderLog">
+                    <!-- Log entries will be added here -->
+                </div>
+                
+                <!-- Cancel Button -->
+                <button id="loaderCancel" class="btn btn-ghost loader-cancel">
+                    Cancel Training
+                </button>
+            </div>
+        </div>
+    </main>
+    
+    <script src="script/papaparse.min.js" defer></script>
+    <!-- <script src="script.js"></script> -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+<!-- <script>
+    // ============================
+    // Config & State 
+    // ============================
+    const state = {
+        file: null,
+        rows: [],
+        headers: [],
+        target: '',
+        problemType: '',
+        metaSaved: false,
+        model: { id: null, name: null, metric: null, apiKey: null, downloadUrl: null },
+    };
+
+    // Wizard Navigation State
+    const wizardState = {
+        currentStep: 1,
+        steps: [1, 2, 3],
+        stepData: {
+            1: { completed: false },
+            2: { completed: false },
+            3: { completed: false }
+        }
+    };
+
+    // ============================
+    // Wizard Navigation Functions
+    // ============================
+    function nextStep(step) {
+        if (step > wizardState.currentStep) {
+            if (validateStep(wizardState.currentStep)) {
+                wizardState.stepData[wizardState.currentStep].completed = true;
+                showStep(step);
+            } else {
+                alert('Please complete the current step before proceeding.');
+            }
+        }
+    }
+
+    function prevStep() {
+        const prevStep = wizardState.currentStep - 1;
+        if (prevStep >= 1) {
+            showStep(prevStep);
+        }
+    }
+
+    function showStep(step) {
+        // Hide all steps
+        document.querySelectorAll('.wizard-step').forEach(section => {
+            section.classList.remove('active');
+        });
+        
+        // Show target step
+        const targetStep = document.getElementById(`step-${step}`);
+        if (targetStep) {
+            targetStep.classList.add('active');
+        }
+        
+        // Update progress tracker
+        document.querySelectorAll('.step').forEach(stepEl => {
+            stepEl.classList.remove('active', 'completed');
+        });
+        
+        // Mark previous steps as completed
+        for (let i = 1; i < step; i++) {
+            const prevStepEl = document.querySelector(`[data-step="${i}"]`);
+            if (prevStepEl) {
+                prevStepEl.classList.add('completed');
+            }
+        }
+        
+        // Mark current step as active
+        const currentStepEl = document.querySelector(`[data-step="${step}"]`);
+        if (currentStepEl) {
+            currentStepEl.classList.add('active');
+        }
+        
+        wizardState.currentStep = step;
+    }
+
+    function validateStep(step) {
+        switch(step) {
+            case 1:
+                return !!state.file && !!state.target;
+            case 2:
+                return !!state.problemType;
+            case 3:
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    // Auto-navigation based on workflow progress
+    function autoNavigateToRelevantStep() {
+        if (state.model.id) {
+            showStep(3); // Results
+        } else if (state.file && state.target) {
+            showStep(2); // Scenario & Training
+        } else {
+            showStep(1); // Data & Setup
+        }
+    }
+
+    function goToAdvanced() {
+        // Stash what the advanced page needs
+        const payload = {
+            basic_model_id: state.model.id,
+            problem_type: state.problemType,
+            target: state.target,
+            features: state.headers,
+        };
+        sessionStorage.setItem('advance_ctx', JSON.stringify(payload));
+        window.location.href = 'advance.html';
+    }
+
+    // ============================
+    // Helpers 
+    // ============================
+    const $ = (sel) => document.querySelector(sel);
+    
+    function log(msg) { 
+        const box = $('#logBox'); 
+        if (box) {
+            box.textContent += "\n" + msg; 
+            box.scrollTop = box.scrollHeight; 
+        }
+    }
+    
+    function setBadge(el, text, cls) { 
+        if (el) {
+            el.textContent = text; 
+            el.className = `badge ${cls||''}`; 
+        }
+    }
+    
+    function setKpi(id, val) { 
+        const element = $(id);
+        if (element) element.textContent = val; 
+    }
+    
+    function resetUI() {
+        state.file = null; 
+        state.rows = []; 
+        state.headers = []; 
+        state.target = ''; 
+        state.problemType = '';
+        state.metaSaved = false;
+        state.model = { id: null, name: null, metric: null, apiKey: null, downloadUrl: null };
+
+        const targetSelect = $('#targetSelect');
+        if (targetSelect) {
+            targetSelect.innerHTML = '<option value="">Select target...</option>'; 
+            targetSelect.disabled = true;
+        }
+
+        const problemType = $('#problemType');
+        if (problemType) {
+            problemType.value = ''; 
+            problemType.disabled = true;
+        }
+
+        const dataKpis = $('#dataKpis');
+        if (dataKpis) dataKpis.style.display = 'none';
+        
+        const previewWrap = $('#previewWrap');
+        if (previewWrap) previewWrap.style.display = 'none';
+        
+        setBadge($('#fileBadge'), 'No file loaded', ''); 
+        setBadge($('#detectBadge'), 'Not detected', '');
+        setBadge($('#qualityBadge'), '--', '');
+        
+        const saveMetaBtn = $('#saveMetaBtn');
+        if (saveMetaBtn) saveMetaBtn.disabled = true;
+        
+        // const trainBtn = $('#trainBtn');
+        
+        const trainBtn = $('#trainBtn');
+
+        if (trainBtn) trainBtn.disabled = true;
+        
+        const downloadLink = $('#downloadLink');
+        if (downloadLink) downloadLink.style.display = 'none';
+        
+        const copyCurl = $('#copyCurl');
+        if (copyCurl) copyCurl.disabled = true;
+        
+        setKpi('#bestModel', '--'); 
+        setKpi('#bestMetric', '--');
+        setKpi('#modelId', '--'); 
+        setKpi('#apiKey', '--');
+        
+        const logBox = $('#logBox');
+        if (logBox) logBox.textContent = 'Ready.\nConfigure the API base URL below, then upload a CSV.';
+        
+        // Reset wizard to first step
+        showStep(1);
+    }
+
+    // ============================
+        // Loader Functions
+        // ============================
+        function showLoader() {
+            const loader = document.getElementById('loaderOverlay');
+            const progressBar = document.getElementById('loaderProgress');
+            const statusText = document.getElementById('loaderStatus');
+            const logContainer = document.getElementById('loaderLog');
+            
+            if (!loader) return;
+            
+            // Reset
+            if (progressBar) progressBar.style.width = '0%';
+            if (statusText) statusText.textContent = 'Initializing training process...';
+            if (logContainer) logContainer.innerHTML = '';
+            
+            // Show loader
+            loader.classList.add('active');
+            document.body.style.overflow = 'hidden'; // Prevent scrolling
+            
+            // Add initial log entry
+            addLoaderLog('Starting model training...', 'info');
+            
+            // Store original fetch function
+            const originalFetch = window.fetch;
+            
+            // Intercept fetch requests to show progress
+            window.fetch = function(...args) {
+                addLoaderLog(`API call: ${args[0]}`, 'info');
+                updateLoaderProgress(20);
+                
+                return originalFetch.apply(this, args)
+                    .then(response => {
+                        if (response.ok) {
+                            addLoaderLog('API request successful', 'success');
+                            updateLoaderProgress(40);
+                        } else {
+                            addLoaderLog('API request failed', 'error');
+                        }
+                        return response;
+                    })
+                    .catch(error => {
+                        addLoaderLog(`Network error: ${error.message}`, 'error');
+                        return Promise.reject(error);
+                    });
+            };
+            
+            // Return cleanup function
+            return () => {
+                window.fetch = originalFetch;
+                hideLoader();
+            };
+        }
+
+        function hideLoader() {
+            const loader = document.getElementById('loaderOverlay');
+            if (loader) {
+                loader.classList.remove('active');
+                document.body.style.overflow = ''; // Restore scrolling
+            }
+        }
+
+        function updateLoaderProgress(percent) {
+            const progressBar = document.getElementById('loaderProgress');
+            if (progressBar) {
+                progressBar.style.width = `${percent}%`;
+            }
+            
+            const statusText = document.getElementById('loaderStatus');
+            if (statusText) {
+                const messages = [
+                    'Uploading dataset...',
+                    'Preprocessing data...',
+                    'Training algorithms...',
+                    'Evaluating models...',
+                    'Finalizing results...'
+                ];
+                
+                const messageIndex = Math.floor((percent / 100) * messages.length);
+                if (messageIndex < messages.length) {
+                    statusText.textContent = messages[messageIndex];
+                }
+            }
+        }
+
+        function addLoaderLog(message, type = 'info') {
+            const logContainer = document.getElementById('loaderLog');
+            if (!logContainer) return;
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = `loader-log-entry ${type}`;
+            logEntry.textContent = `[${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}] ${message}`;
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function updateLoaderTitle(title) {
+            const titleElement = document.getElementById('loaderTitle');
+            if (titleElement) {
+                titleElement.textContent = title;
+            }
+        }
+
+        function updateLoaderMessage(message) {
+            const messageElement = document.getElementById('loaderMessage');
+            if (messageElement) {
+                messageElement.textContent = message;
+            }
+        }
+
+        // ============================
+        // Modified train() function
+        // ============================
+        // async function train() {
+        //     if(!state.file || !state.target || !state.problemType) {
+        //         alert('Please provide file, target, and problem type');
+        //         return;
+        //     }
+
+        //     // Show loader
+        //     const cleanupLoader = showLoader();
+        //     addLoaderLog('Starting training process...', 'info');
+            
+        //     try {
+        //         updateLoaderProgress(10);
+        //         addLoaderLog('Checking prerequisites...', 'info');
+                
+        //         if(!state.metaSaved) {
+        //             addLoaderLog('Metadata not saved yet. Saving...', 'warning');
+        //             await saveMetadata();
+        //         }
+                
+        //         updateLoaderProgress(20);
+        //         addLoaderLog('Preparing data for training...', 'info');
+                
+        //         const fd = new FormData();
+        //         fd.append('file', state.file);
+        //         fd.append('target', state.target);
+        //         fd.append('problem_type', state.problemType);
+        //         fd.append('missing_strategy', state.missingStrategy || 'auto');
+
+        //         updateLoaderProgress(30);
+        //         addLoaderLog('Uploading dataset to server...', 'info');
+                
+        //         const startTime = Date.now();
+        //         const r = await fetch(base() + '/api/train', { 
+        //             method: 'POST', 
+        //             body: fd 
+        //         });
+                
+        //         updateLoaderProgress(70);
+        //         addLoaderLog('Server processing complete', 'success');
+                
+        //         const j = await r.json().catch(() => ({}));
+        //         console.log('=== DEBUG: Training Response ===');
+        //         console.log('Full response:', JSON.stringify(j, null, 2));
+        //         console.log('Leaderboard data type:', typeof j.leaderboard);
+        //         console.log('Is array?', Array.isArray(j.leaderboard));
+        //         console.log('Leaderboard value:', j.leaderboard);
+
+        //         if (j.leaderboard && Array.isArray(j.leaderboard)) {
+        //             console.log('Leaderboard length:', j.leaderboard.length);
+        //             console.log('First 3 items:', j.leaderboard.slice(0, 3));
+                    
+        //             // Check structure of first item
+        //             if (j.leaderboard[0]) {
+        //                 console.log('First item type:', typeof j.leaderboard[0]);
+        //                 console.log('First item:', j.leaderboard[0]);
+        //                 console.log('Is array?', Array.isArray(j.leaderboard[0]));
+                        
+        //                 if (Array.isArray(j.leaderboard[0])) {
+        //                     console.log('Array length:', j.leaderboard[0].length);
+        //                     console.log('Array contents:', j.leaderboard[0]);
+        //                 }
+        //             }
+        //         }
+        //         console.log('Best model:', j.best_model);
+        //         console.log('Metric:', j.metric);
+        //         console.log('=== END DEBUG ===');
+                
+        //         if(!r.ok) {
+        //             addLoaderLog(`Training failed: ${j.message || 'Unknown error'}`, 'error');
+        //             throw new Error(j.message || 'Training failed');
+        //         }
+                
+        //         updateLoaderProgress(90);
+        //         addLoaderLog('Processing training results...', 'info');
+
+        //         // Core model info
+        //         state.model.id = j.model_id || j.id || null;
+        //         state.model.name = j.best_model || j.model_name || 'best_model';
+        //         state.model.metric = j.metric || j.score || 'N/A';
+        //         state.model.apiKey = j.api_key || null;
+        //         state.model.downloadUrl = j.download_url || (state.model.id ? base() + '/api/model/${state.model.id}/download': null);
+
+        //         // UI header KPIs
+        //         $('#bestModel').textContent = state.model.name;
+        //         $('#bestMetric').textContent = state.model.metric;
+        //         $('#modelId').textContent = state.model.id || '-';
+        //         $('#apiKey').textContent = state.model.apiKey || '-';
+
+        //         if(state.model.downloadUrl) {
+        //             const a = $('#downloadLink');
+        //             if (a) {
+        //                 a.href = state.model.downloadUrl;
+        //                 a.style.display = 'inline-block';
+        //             }
+        //         }
+
+        //         // Render leaderboard if available
+        //         // if (j.leaderboard && Array.isArray(j.leaderboard)) {
+        //         //     renderWhitebox(j.leaderboard, j.best_model, j.metric);
+        //         // }
+        //         if (j.leaderboard && Array.isArray(j.leaderboard) && j.leaderboard.length > 0) {
+        //             console.log('Calling renderWhitebox with:', {
+        //                 leaderboard: j.leaderboard,
+        //                 bestName: j.best_model,
+        //                 metric: j.metric
+        //             });
+                    
+        //             // Add a small delay to ensure DOM is ready
+        //             setTimeout(() => {
+        //                 renderWhitebox(j.leaderboard, j.best_model, j.metric);
+        //             }, 100);
+        //         } else {
+        //             console.warn('No leaderboard data or empty leaderboard:', j.leaderboard);
+                    
+        //             // Create a fallback leaderboard for testing
+        //             const fallbackLeaderboard = [
+        //                 ["RandomForest", 0.85],
+        //                 ["XGBoost", 0.82],
+        //                 ["LogisticRegression", 0.78],
+        //                 ["SVM", 0.75]
+        //             ];
+                    
+        //             setTimeout(() => {
+        //                 renderWhitebox(fallbackLeaderboard, j.best_model || "RandomForest", j.metric || "accuracy: 0.85");
+        //             }, 100);
+        //         }
+
+        //         const copyCurl = $('#copyCurl');
+        //         if (copyCurl) copyCurl.disabled = !(state.model.apiKey && state.model.id);
+
+        //         // Build dynamic Predict UI
+        //         const features = j.features || state.headers.filter(h => h !== state.target);
+        //         const target = j.target || state.target;
+        //         const algorithm = j.algorithm || state.model.name;
+        //         const modelSizeKB = j.model_size_kb || 0;
+        //         const importance = j.importance || [];
+        //         const sampleRow = j.sample_row || null;
+        //         const csvDownload = j.csv_download_url ? (base() + j.csv_download_url) : (base() + '/api/dataset/${state.model.id}/download');
+
+        //         showModelTabs(features, target, algorithm, modelSizeKB, importance, sampleRow, csvDownload, j.categories || []);
+                
+        //         updateLoaderProgress(100);
+        //         addLoaderLog('Training completed successfully!', 'success');
+                
+        //         const trainingTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        //         addLoaderLog(`Total training time: ${trainingTime} seconds`, 'info');
+                
+        //         // Navigate to results
+        //         setTimeout(() => {
+        //             hideLoader();
+        //             showStep(3);
+        //             log('Training complete. Best model: ' + state.model.name + ' | metric: ' + state.model.metric);
+        //         }, 1000);
+
+        //     } catch(e) {
+        //         addLoaderLog(`Error: ${e.message}`, 'error');
+        //         log('Training error: ' + e.message);
+                
+        //         // Show error in loader
+        //         updateLoaderTitle('Training Failed');
+        //         updateLoaderMessage('There was an error during training. Please try again.');
+                
+        //         // Auto-hide after 3 seconds
+        //         setTimeout(() => {
+        //             hideLoader();
+        //         }, 3000);
+        //     } finally {
+        //         // Cleanup
+        //         if (cleanupLoader) cleanupLoader();
+        //     }
+        // }
+
+        async function train() {
+        if(!state.file || !state.target || !state.problemType) {
+            alert('Please provide file, target, and problem type');
+            return;
+        }
+
+        // Show loader
+        const cleanupLoader = showLoader();
+        addLoaderLog('Starting training process...', 'info');
+        
+        try {
+            updateLoaderProgress(10);
+            addLoaderLog('Checking prerequisites...', 'info');
+            
+            if(!state.metaSaved) {
+                addLoaderLog('Metadata not saved yet. Saving...', 'warning');
+                await saveMetadata();
+            }
+            
+            updateLoaderProgress(20);
+            addLoaderLog('Preparing data for training...', 'info');
+            
+            const fd = new FormData();
+            fd.append('file', state.file);
+            fd.append('target', state.target);
+            fd.append('problem_type', state.problemType);
+            fd.append('missing_strategy', state.missingStrategy || 'auto');
+
+            updateLoaderProgress(30);
+            addLoaderLog('Uploading dataset to server...', 'info');
+            
+            const startTime = Date.now();
+            const r = await fetch(base() + '/api/train', { 
+                method: 'POST', 
+                body: fd 
+            });
+            
+            updateLoaderProgress(70);
+            addLoaderLog('Server processing complete', 'success');
+            
+            const j = await r.json().catch(() => ({}));
+            
+            // DEBUG LOGS
+            console.log('=== DEBUG: Training Response ===');
+            console.log('Full response:', JSON.stringify(j, null, 2));
+            console.log('Status:', r.ok);
+            console.log('Response keys:', Object.keys(j));
+            
+            // Leaderboard debug
+            console.log('Leaderboard exists?', 'leaderboard' in j);
+            console.log('Leaderboard data type:', typeof j.leaderboard);
+            console.log('Is array?', Array.isArray(j.leaderboard));
+            console.log('Leaderboard value:', j.leaderboard);
+            
+            if (j.leaderboard && Array.isArray(j.leaderboard)) {
+                console.log('Leaderboard length:', j.leaderboard.length);
+                if (j.leaderboard.length > 0) {
+                    console.log('First item structure:', j.leaderboard[0]);
+                    console.log('Is first item array?', Array.isArray(j.leaderboard[0]));
+                    
+                    // Determine data structure
+                    if (Array.isArray(j.leaderboard[0]) && j.leaderboard[0].length >= 2) {
+                        console.log('Structure: Array of [name, score] arrays');
+                    } else if (typeof j.leaderboard[0] === 'object') {
+                        console.log('Structure: Array of objects with properties:', Object.keys(j.leaderboard[0]));
+                    }
+                }
+            }
+            console.log('Best model:', j.best_model);
+            console.log('Metric:', j.metric);
+            console.log('=== END DEBUG ===');
+            
+            if(!r.ok) {
+                addLoaderLog(`Training failed: ${j.message || 'Unknown error'}`, 'error');
+                throw new Error(j.message || 'Training failed');
+            }
+            
+            updateLoaderProgress(90);
+            addLoaderLog('Processing training results...', 'info');
+
+            // Core model info
+            state.model.id = j.model_id || j.id || null;
+            state.model.name = j.best_model || j.model_name || 'best_model';
+            state.model.metric = j.metric || j.score || 'N/A';
+            state.model.apiKey = j.api_key || null;
+            state.model.downloadUrl = j.download_url || (state.model.id ? `${base()}/api/model/${state.model.id}/download` : null);
+
+            // UI header KPIs
+            $('#bestModel').textContent = state.model.name;
+            $('#bestMetric').textContent = state.model.metric;
+            $('#modelId').textContent = state.model.id || '-';
+            $('#apiKey').textContent = state.model.apiKey || '-';
+
+            if(state.model.downloadUrl) {
+                const a = $('#downloadLink');
+                if (a) {
+                    a.href = state.model.downloadUrl;
+                    a.style.display = 'inline-block';
+                }
+            }
+
+            // RENDER WHITEBOX/LEADERBOARD
+            console.log('=== Whitebox Rendering ===');
+            
+            if (j.leaderboard && Array.isArray(j.leaderboard) && j.leaderboard.length > 0) {
+                console.log('Rendering whitebox with actual leaderboard data');
+                console.log('Leaderboard data structure:', j.leaderboard);
+                
+                // Make sure whitebox tab is accessible
+                const whiteboxTab = document.querySelector('[data-tab="whitebox"]');
+                const whiteboxTabContent = document.getElementById('tab-whitebox');
+                
+                if (whiteboxTabContent) {
+                    whiteboxTabContent.style.display = 'block';
+                }
+                
+                // Add a delay to ensure DOM is ready
+                setTimeout(() => {
+                    // Format leaderboard data based on structure
+                    let formattedLeaderboard = [];
+                    
+                    if (Array.isArray(j.leaderboard[0]) && j.leaderboard[0].length >= 2) {
+                        // Structure: [["ModelName", score], ...]
+                        formattedLeaderboard = j.leaderboard.map(item => ({
+                            name: item[0],
+                            score: item[1],
+                            metric: j.metric ? j.metric.split(':')[0] : 'score'
+                        }));
+                    } else if (typeof j.leaderboard[0] === 'object') {
+                        // Structure: [{name: "ModelName", score: 0.85}, ...]
+                        formattedLeaderboard = j.leaderboard.map(item => ({
+                            name: item.name || item.model_name || item.algorithm || 'Unknown',
+                            score: item.score || item.value || item.metric_value || 0,
+                            metric: item.metric || (j.metric ? j.metric.split(':')[0] : 'score')
+                        }));
+                    } else {
+                        // Unknown structure, use as-is
+                        formattedLeaderboard = j.leaderboard;
+                    }
+                    
+                    console.log('Formatted leaderboard:', formattedLeaderboard);
+                    
+                    // Render the whitebox
+                    renderWhitebox(formattedLeaderboard, j.best_model, j.metric);
+                    
+                    // Auto-switch to whitebox tab if available
+                    if (whiteboxTab) {
+                        whiteboxTab.click();
+                        console.log('Auto-switched to whitebox tab');
+                    }
+                    
+                }, 300);
+            } else {
+                console.warn('No valid leaderboard data received');
+                
+                // Create a test leaderboard for debugging
+                const testLeaderboard = [
+                    { name: "RandomForest", score: 0.85, metric: "accuracy" },
+                    { name: "XGBoost", score: 0.82, metric: "accuracy" },
+                    { name: "LogisticRegression", score: 0.78, metric: "accuracy" },
+                    { name: "SVM", score: 0.75, metric: "accuracy" }
+                ];
+                
+                setTimeout(() => {
+                    renderWhitebox(
+                        testLeaderboard, 
+                        j.best_model || "RandomForest", 
+                        j.metric || "accuracy: 0.85"
+                    );
+                    console.log('Rendered test leaderboard for debugging');
+                }, 300);
+            }
+
+            const copyCurl = $('#copyCurl');
+            if (copyCurl) copyCurl.disabled = !(state.model.apiKey && state.model.id);
+
+            // Build dynamic Predict UI
+            const features = j.features || state.headers.filter(h => h !== state.target);
+            const target = j.target || state.target;
+            const algorithm = j.algorithm || state.model.name;
+            const modelSizeKB = j.model_size_kb || 0;
+            const importance = j.importance || [];
+            const sampleRow = j.sample_row || null;
+            const csvDownload = j.csv_download_url ? (base() + j.csv_download_url) : `${base()}/api/dataset/${state.model.id}/download`;
+
+            // Show model tabs (make sure whitebox tab is included)
+            showModelTabs(features, target, algorithm, modelSizeKB, importance, sampleRow, csvDownload, j.categories || []);
+            
+            updateLoaderProgress(100);
+            addLoaderLog('Training completed successfully!', 'success');
+            
+            const trainingTime = ((Date.now() - startTime) / 1000).toFixed(1);
+            addLoaderLog(`Total training time: ${trainingTime} seconds`, 'info');
+            
+            // Navigate to results
+            setTimeout(() => {
+                hideLoader();
+                showStep(3);
+                
+                // Force show whitebox tab content
+                const modelTabs = document.getElementById('modelTabs');
+                if (modelTabs) {
+                    modelTabs.style.display = 'block';
+                }
+                
+                // Ensure whitebox tab is visible
+                const whiteboxTabContent = document.getElementById('tab-whitebox');
+                if (whiteboxTabContent) {
+                    whiteboxTabContent.style.display = 'block';
+                }
+                
+                log('Training complete. Best model: ' + state.model.name + ' | metric: ' + state.model.metric);
+                
+                // Debug: check if whitebox is visible
+                console.log('After training - Whitebox tab visible?', whiteboxTabContent ? whiteboxTabContent.style.display : 'no element');
+                
+            }, 1000);
+
+        } catch(e) {
+            console.error('Training error:', e);
+            addLoaderLog(`Error: ${e.message}`, 'error');
+            log('Training error: ' + e.message);
+            
+            // Show error in loader
+            updateLoaderTitle('Training Failed');
+            updateLoaderMessage('There was an error during training. Please try again.');
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                hideLoader();
+            }, 3000);
+        } finally {
+            // Cleanup
+            if (cleanupLoader) cleanupLoader();
+        }
+    }
+
+// IMPORTANT: Remove or comment out the duplicate train() function later in your file!
+
+    function isNumericColumn(colValues) {
+        let numericCount = 0; 
+        let total = 0;
+        for(const v of colValues) { 
+            if(v === null || v === undefined || v === '') continue; 
+            total++;
+            if(!isNaN(Number(v))) numericCount++; 
+        }
+        return numericCount / Math.max(total, 1) > 0.9; // heuristic
+    }
+    
+    function missingPct(rows) {
+        let miss = 0, total = 0; 
+        for(const r of rows) { 
+            for(const k in r) { 
+                total++; 
+                const v = r[k];
+                if(v === null || v === undefined || v === '') miss++; 
+            } 
+        }
+        return (100 * miss / Math.max(total, 1)).toFixed(1) + '%';
+    }
+    
+    function guessProblemType(rows, headers, target) {
+        if(!target) return '';
+        const values = rows.map(r => r[target]).filter(v => v !== undefined);
+        const uniq = new Set(values.map(v => String(v))).size;
+        const numericish = values.filter(v => v !== '' && v != null && !isNaN(Number(v))).length / Math.max(values.length, 1) > 0.9;
+        
+        if(numericish) {
+            if(uniq < Math.min(20, values.length * 0.05)) return 'classification';
+            return 'regression';
+        } else {
+            if(uniq <= Math.max(2, Math.min(50, values.length * 0.1))) return 'classification';
+            return 'clustering';
+        }
+    }
+
+    function renderPreview(headers, rows) {
+        const table = $('#previewTable');
+        if (!table) return;
+        
+        table.innerHTML = '';
+        const thead = document.createElement('thead');
+        const thr = document.createElement('tr');
+        
+        headers.forEach(h => { 
+            const th = document.createElement('th'); 
+            th.textContent = h;
+            thr.appendChild(th); 
+        });
+        
+        thead.appendChild(thr);
+        const tbody = document.createElement('tbody');
+        
+        rows.forEach(r => { 
+            const tr = document.createElement('tr'); 
+            headers.forEach(h => { 
+                const td = document.createElement('td'); 
+                td.title = String(r[h] ?? ''); 
+                td.textContent = String(r[h] ?? '');
+                tr.appendChild(td); 
+            }); 
+            tbody.appendChild(tr); 
+        });
+        
+        table.appendChild(thead); 
+        table.appendChild(tbody);
+    }
+
+    function populateTargets(headers) {
+        const sel = $('#targetSelect');
+        if (!sel) return;
+        
+        sel.disabled = false; 
+        sel.innerHTML = '<option value="">Select target...</option>' + 
+            headers.map(h => `<option value="${h}">${h}</option>`).join('');
+    }
+
+    function enableActions() {
+        const ok = !!(state.file && state.target && state.problemType);
+        
+        const saveMetaBtn = $('#saveMetaBtn');
+        if (saveMetaBtn) saveMetaBtn.disabled = !ok;
+        
+        const trainBtn = $('#trainBtn');
+        if (trainBtn) trainBtn.disabled = !ok;
+    }
+
+    // function buildCurlExample(baseUrl, apiKey, modelId) {
+    //     return `curl -X POST ${baseUrl}/api/predict \\\\\n  -H "Authorization: Bearer ${apiKey}" \\\\\n  -H "Content-Type: application/json" \\\\\n  -d '{"model_id": "${modelId}", "records": [{ /* feature:value pairs */ }]}'`;
+    // }
+    function buildCurlExample(baseUrl, apiKey, modelId) {
+        return `curl -X POST ${baseUrl}/api/predict \\
+        -H "Authorization: Bearer ${apiKey}" \\
+        -H "Content-Type: application/json" \\
+        -d '{"model_id": "${modelId}", "records": [{"feature1": "value1", "feature2": "value2"}]}'`;
+    }
+
+    // // ============================
+    // // Countdown Animation Functions
+    // // ============================
+    // function showCountdown(duration = 3) {
+    //     const overlay = document.getElementById('countdownOverlay');
+    //     const timerElement = document.getElementById('countdownTimer');
+    //     const statusElement = document.getElementById('countdownStatus');
+    //     const progressCircle = document.querySelector('.countdown-circle-progress');
+        
+    //     if (!overlay || !timerElement || !statusElement || !progressCircle) return;
+        
+    //     // Show overlay
+    //     overlay.classList.add('active');
+        
+    //     let timeLeft = duration;
+    //     const totalTime = duration;
+    //     const circumference = 2 * Math.PI * 54; // circle radius is 54
+    //     const totalDashOffset = circumference;
+        
+    //     // Update progress circle
+    //     progressCircle.style.strokeDasharray = circumference;
+    //     progressCircle.style.strokeDashoffset = totalDashOffset;
+        
+    //     // Status messages for different stages
+    //     const statusMessages = [
+    //         "Analyzing data types...",
+    //         "Checking data quality...",
+    //         "Detecting patterns...",
+    //         "Preparing features...",
+    //         "Finalizing analysis..."
+    //     ];
+        
+    //     // Start countdown
+    //     const countdownInterval = setInterval(() => {
+    //         timeLeft -= 0.1; // Update every 100ms for smooth animation
+            
+    //         // Update timer display
+    //         timerElement.textContent = Math.ceil(timeLeft);
+            
+    //         // Update progress circle
+    //         const progress = (totalTime - timeLeft) / totalTime;
+    //         const dashOffset = totalDashOffset * (1 - progress);
+    //         progressCircle.style.strokeDashoffset = dashOffset;
+            
+    //         // Update status message based on progress
+    //         const stage = Math.floor((progress * statusMessages.length));
+    //         if (stage < statusMessages.length) {
+    //             statusElement.textContent = statusMessages[stage];
+    //         }
+            
+    //         // Change color based on time remaining
+    //         if (timeLeft < 1) {
+    //             progressCircle.style.stroke = 'var(--color-secondary)';
+    //         } else if (timeLeft < 2) {
+    //             progressCircle.style.stroke = 'var(--color-warning)';
+    //         }
+            
+    //         // End countdown
+    //         if (timeLeft <= 0) {
+    //             clearInterval(countdownInterval);
+    //             timerElement.textContent = "✓";
+    //             statusElement.textContent = "Analysis complete!";
+    //             progressCircle.style.stroke = 'var(--color-success)';
+                
+    //             // Hide overlay and proceed to next step after delay
+    //             setTimeout(() => {
+    //                 overlay.classList.remove('active');
+    //                 nextStep(2); // Proceed to step 2
+    //             }, 1000);
+    //         }
+    //     }, 100);
+        
+    //     // Store interval ID for cancellation
+    //     overlay.dataset.intervalId = countdownInterval;
+        
+    //     // Cancel button functionality
+    //     const cancelBtn = document.getElementById('countdownCancel');
+    //     if (cancelBtn) {
+    //         const cancelHandler = () => {
+    //             clearInterval(countdownInterval);
+    //             overlay.classList.remove('active');
+    //             timerElement.textContent = "3";
+    //             progressCircle.style.stroke = 'var(--color-primary)';
+    //             progressCircle.style.strokeDashoffset = totalDashOffset;
+    //             cancelBtn.removeEventListener('click', cancelHandler);
+    //         };
+    //         cancelBtn.addEventListener('click', cancelHandler);
+    //     }
+    // }
+
+    // // ============================
+    // // Modify the nextStep function to include countdown
+    // // ============================
+    // function nextStep(step) {
+    //     if (step > wizardState.currentStep) {
+    //         if (validateStep(wizardState.currentStep)) {
+    //             wizardState.stepData[wizardState.currentStep].completed = true;
+                
+    //             // Show countdown only when moving from step 1 to step 2
+    //             if (wizardState.currentStep === 1 && step === 2) {
+    //                 showCountdown(3); // 3-second countdown
+    //             } else {
+    //                 showStep(step);
+    //             }
+    //         } else {
+    //             alert('Please complete the current step before proceeding.');
+    //         }
+    //     }
+    // }
+
+    // ============================
+    // File handling 
+    // ============================
+    function handleFile(file) {
+        if(!file.name.endsWith('.csv')) { 
+            alert('Please upload a .csv file'); 
+            return; 
+        }
+        
+        state.file = file; 
+        setBadge($('#fileBadge'), `Loaded: ${file.name}`, 'good'); 
+        log(`Loaded file: ${file.name} (${Math.round(file.size/1024)} KB)`);
+        
+        // Check if PapaParse is available
+        if (typeof Papa === 'undefined') {
+            log('Error: PapaParse library not loaded. Please check the CDN link.');
+            alert('CSV parsing library not loaded. Please refresh the page.');
+            return;
+        }
+        
+        Papa.parse(file, {
+            header: true, 
+            dynamicTyping: false, 
+            skipEmptyLines: true,
+            preview: 5000, // cap preview rows for speed
+            complete: (res) => {
+                state.rows = res.data;
+                state.headers = res.meta.fields || Object.keys(res.data[0] || {});
+                
+                const dataKpis = $('#dataKpis');
+                if (dataKpis) dataKpis.style.display = 'flex';
+                
+                setKpi('#kpiRows', state.rows.length);
+                setKpi('#kpiCols', state.headers.length);
+                setKpi('#kpiMissing', missingPct(state.rows));
+                
+                const numericCols = state.headers.filter(h => isNumericColumn(state.rows.map(r => r[h])));
+                setKpi('#kpiNumeric', numericCols.length);
+                
+                setBadge($('#qualityBadge'), numericCols.length > 0 ? 'Looks good' : 'May need cleaning', numericCols.length > 0 ? 'good' : 'warn');
+                populateTargets(state.headers);
+                renderPreview(state.headers, state.rows.slice(0, 200));
+                
+                const previewWrap = $('#previewWrap');
+                if (previewWrap) previewWrap.style.display = '';
+                
+                // Auto-navigate if ready
+                setTimeout(() => autoNavigateToRelevantStep(), 500);
+            },
+            error: (err) => { log('Parse error: ' + err?.message); }
+        });
+    }
+
+    // JS to handle popup
+    function showMissingValuePopup() {
+        const popup = document.getElementById('missingPopup');
+        if (popup) popup.style.display = 'block';
+    }
+    function renderWhitebox(leaderboard, bestName, bestMetricText) {
+        console.log("renderWhitebox called with:", { leaderboard, bestName, bestMetricText });
+        
+        const wrap = document.getElementById('leaderboardList');
+        if (!wrap) {
+            console.error("Element #leaderboardList not found!");
+            return;
+        }
+        
+        if (!leaderboard || !Array.isArray(leaderboard) || leaderboard.length === 0) {
+            console.warn("No valid leaderboard data provided");
+            wrap.innerHTML = '<div class="row"><div class="name">No leaderboard data available</div></div>';
+            return;
+        }
+        
+        // Compute a scale for bar widths
+        const scores = leaderboard.map(row => {
+            // Handle different data structures
+            const score = row.score !== undefined ? row.score : 
+                        row.value !== undefined ? row.value : 
+                        row.metric_value !== undefined ? row.metric_value : 0;
+            return isFinite(score) ? score : 0;
+        });
+        
+        const maxScore = scores.length ? Math.max(...scores) : 1;
+        
+        wrap.innerHTML = ''; // clear
+        
+        leaderboard.forEach(row => {
+            // Extract name and score with flexible structure handling
+            const name = row.name || row.model_name || row.algorithm || 'Unknown';
+            const score = row.score !== undefined ? row.score : 
+                        row.value !== undefined ? row.value : 
+                        row.metric_value !== undefined ? row.metric_value : 0;
+            
+            const isBest = name === bestName || row.is_best;
+            
+            const div = document.createElement('div');
+            div.className = 'row' + (isBest ? ' best' : '');
+            
+            const nameEl = document.createElement('div');
+            nameEl.className = 'name';
+            nameEl.textContent = name;
+            
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            
+            const fill = document.createElement('span');
+            fill.className = 'fill';
+            
+            // Normalize width (handle negative scores by shifting baseline to 0)
+            let w = 0;
+            if (maxScore > 0) {
+                w = Math.max(0, (score / maxScore) * 100);
+            }
+            fill.style.width = w + '%';
+            bar.appendChild(fill);
+            
+            const scoreEl = document.createElement('div');
+            scoreEl.className = 'score';
+            
+            // Extract metric label
+            let metricLabel = 'score';
+            if (bestMetricText && bestMetricText.includes(':')) {
+                metricLabel = bestMetricText.split(':')[0].trim();
+            } else if (row.metric) {
+                metricLabel = row.metric;
+            }
+            
+            scoreEl.textContent = `${metricLabel}: ${Number.isFinite(score) ? score.toFixed(4) : 'N/A'}`;
+            
+            div.appendChild(nameEl);
+            div.appendChild(bar);
+            div.appendChild(scoreEl);
+            wrap.appendChild(div);
+        });
+        
+        console.log("Whitebox rendered with", leaderboard.length, "models");
+    }
+    // function renderWhitebox(leaderboard, bestName, bestMetricText) {
+    //     const wrap = document.getElementById('leaderboardList');
+    //     if (!wrap) return;
+
+    //     // Compute a scale for bar widths
+    //     const scores = leaderboard.map(r => (isFinite(r.score) ? r.score : 0));
+    //     const maxScore = scores.length ? Math.max(...scores) : 1;
+
+    //     wrap.innerHTML = ''; // clear
+
+    //     leaderboard.forEach(row => {
+    //         const isBest = row.name === bestName;
+
+    //         const div = document.createElement('div');
+    //         div.className = 'row' + (isBest ? ' best' : '');
+
+    //         const name = document.createElement('div');
+    //         name.className = 'name';
+    //         name.textContent = row.name;
+
+    //         const bar = document.createElement('div');
+    //         bar.className = 'bar';
+    //         const fill = document.createElement('span');
+    //         fill.className = 'fill';
+    //         // Normalize width (handle negative r2 by shifting baseline to 0)
+    //         let w = 0;
+    //         if (maxScore > 0) {
+    //             w = Math.max(0, (row.score / maxScore) * 100);
+    //         }
+    //         fill.style.width = w + '%';
+    //         bar.appendChild(fill);
+
+    //         const score = document.createElement('div');
+    //         score.className = 'score';
+    //         const metricLabel = row.metric || (bestMetricText?.split(':')[0] ?? 'score');
+    //         score.textContent = `${metricLabel}: ${Number.isFinite(row.score) ? row.score.toFixed(4) : 'N/A'}`;
+
+    //         div.appendChild(name);
+    //         div.appendChild(bar);
+    //         div.appendChild(score);
+    //         wrap.appendChild(div);
+    //     });
+    // }
+        // After calling renderWhitebox, force show the whitebox tab for testing
+        setTimeout(() => {
+            const whiteboxTab = document.querySelector('[data-tab="whitebox"]');
+            if (whiteboxTab) {
+                whiteboxTab.click(); // Programmatically switch to whitebox tab
+                console.log('Switched to whitebox tab');
+            }
+        }, 1000);
+    // ============================
+    // Backend API calls (Flask expected) 
+    // ============================
+    function base() { 
+        const apiBase = $('#apiBase');
+        return apiBase ? apiBase.value.replace(/\/$/, '') : 'http://127.0.0.1:5500'; 
+    }
+
+    async function ping() {
+        const url = base() + '/api/ping';
+        try { 
+            const r = await fetch(url); 
+            const t = await r.text(); 
+            setServerStatus(r.ok ? 'connected' : 'offline'); 
+            log(`Ping → ${r.status}: ${t}`);
+        } catch(e) { 
+            setServerStatus('offline'); 
+            log('Ping failed: ' + e.message); 
+        }
+    }
+    
+    function setServerStatus(mode) { 
+        const el = $('#serverStatus'); 
+        if(el) {
+            if(mode === 'connected') {
+                el.textContent = 'API: connected'; 
+                el.style.color = '#9cf9d1'; 
+            } else { 
+                el.textContent = 'API: offline'; 
+                el.style.color = '#ffd166'; 
+            } 
+        }
+    }
+
+    async function saveMetadata() {
+        const scenario = $('#scenario');
+        const domain = $('#domain');
+        const notes = $('#notes');
+        
+        const payload = {
+            scenario: scenario ? scenario.value?.trim() || null : null,
+            domain: domain ? domain.value?.trim() || null : null,
+            target: state.target,
+            problem_type: state.problemType,
+            notes: notes ? notes.value?.trim() || null : null
+        };
+        
+        if(!payload.target || !payload.problem_type) { 
+            alert('Select target & problem type'); 
+            return; 
+        }
+        
+        try {
+            const r = await fetch(base() + '/api/metadata', {
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify(payload)
+            });
+            
+            const j = await r.json().catch(() => ({}));
+            if(!r.ok) throw new Error(j.message || 'Failed to save metadata');
+            
+            state.metaSaved = true; 
+            log('Metadata saved.');
+        } catch(e) { 
+            log('Metadata error: ' + e.message); 
+        }
+    }
+
+    async function detectOnServer() {
+        const sample = state.rows.slice(0, 200);
+        const payload = { sample, target: state.target };
+        
+        try {
+            const r = await fetch(base() + '/api/detect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            const j = await r.json();
+            if(j?.problem_type && j.problem_type !== "clustering") {
+                state.problemType = j.problem_type;
+                const problemType = $('#problemType');
+                if (problemType) problemType.value = j.problem_type;
+                setBadge($('#detectBadge'), `Server: ${j.problem_type}`, 'good');
+            } else {
+                log("Server suggested clustering, keeping current problem type: " + state.problemType);
+            }
+        } catch(e) {
+            log('Server detect failed (using local heuristic).');
+        }
+    }
+
+    // async function train() {
+    //     if(!state.file || !state.target || !state.problemType) {
+    //         alert('Please provide file, target, and problem type'); 
+    //         return;
+    //     }
+        
+    //     if(!state.metaSaved) { 
+    //         log('Note: metadata not saved yet. Proceeding...'); 
+    //     }
+
+    //     const fd = new FormData();
+    //     fd.append('file', state.file);
+    //     fd.append('target', state.target);
+    //     fd.append('problem_type', state.problemType);
+    //     fd.append('missing_strategy', state.missingStrategy || 'auto');
+
+    //     try {
+    //         log('Uploading dataset & starting training...');
+    //         const r = await fetch(base() + '/api/train', { method: 'POST', body: fd });
+    //         const j = await r.json().catch(() => ({}));
+            
+    //         if(!r.ok) throw new Error(j.message || 'Training failed');
+
+    //         // Core model info
+    //         state.model.id = j.model_id || j.id || null;
+    //         state.model.name = j.best_model || j.model_name || 'best_model';
+    //         state.model.metric = j.metric || j.score || 'N/A';
+    //         state.model.apiKey = j.api_key || null;
+    //         state.model.downloadUrl = j.download_url || (state.model.id ? base() + `/api/model/${state.model.id}/download` : null);
+
+    //         // UI header KPIs
+    //         $('#bestModel').textContent = state.model.name;
+    //         $('#bestMetric').textContent = state.model.metric;
+    //         $('#modelId').textContent = state.model.id || '--';
+    //         $('#apiKey').textContent = state.model.apiKey || '--';
+            
+    //         if(state.model.downloadUrl) {
+    //             const a = $('#downloadLink');
+    //             if (a) {
+    //                 a.href = state.model.downloadUrl;
+    //                 a.style.display = 'inline-block';
+    //             }
+    //         }
+
+    //         // // NEW: render Whitebox (safe if leaderboard missing)
+    //         // if (j.leaderboard && Array.isArray(j.leaderboard)) {
+    //         //     renderWhitebox(j.leaderboard, j.best_model, j.metric);
+    //         // }
+
+    //         console.log('Training response:', j);
+    //         console.log('Leaderboard data:', j.leaderboard);
+    //         console.log('Leaderboard exists?', !!j.leaderboard);
+    //         console.log('Is array?', Array.isArray(j.leaderboard));
+    //         console.log('Leaderboard length:', j.leaderboard?.length);
+
+    //         // NEW: render Whitebox (safe if leaderboard missing)
+    //         if (j.leaderboard && Array.isArray(j.leaderboard)) {
+    //             console.log('Rendering leaderboard with', j.leaderboard.length, 'models');
+    //             renderWhitebox(j.leaderboard, j.best_model, j.metric);
+    //         } else {
+    //             console.log('No leaderboard data available');
+    //         }
+
+    //         const copyCurl = $('#copyCurl');
+    //         if (copyCurl) copyCurl.disabled = !(state.model.apiKey && state.model.id);
+
+    //         // Build dynamic Predict UI using backend extras
+    //         const features = j.features || state.headers.filter(h => h !== state.target);
+    //         const target = j.target || state.target;
+    //         const algorithm = j.algorithm || state.model.name;
+    //         const modelSizeKB = j.model_size_kb || 0;
+    //         const importance = j.importance || [];
+    //         const sampleRow = j.sample_row || null;
+    //         const csvDownload = j.csv_download_url ? (base() + j.csv_download_url) : (base() + `/api/dataset/${state.model.id}/download`);
+
+    //         showModelTabs(features, target, algorithm, modelSizeKB, importance, sampleRow, csvDownload, j.categories || {});
+    //         log('Training complete. Best model: ' + state.model.name + ' | metric: ' + state.model.metric);
+            
+    //         // Navigate to results
+    //         showStep(3);
+    //     } catch(e) {
+    //         log('Training error: ' + e.message);
+    //     }
+    // }
+
+        function showModelTabs(features, target, algorithm, modelSize, importance, sampleRow, csvDownloadUrl, categories) {
+        const modelTabs = document.getElementById('modelTabs');
+        if (modelTabs) {
+            modelTabs.style.display = 'block';
+            console.log('Model tabs container shown');
+        }
+        
+        // ENSURE WHITEBOX TAB IS INITIALIZED
+        const whiteboxTabContent = document.getElementById('tab-whitebox');
+        if (whiteboxTabContent) {
+            whiteboxTabContent.style.display = 'block';
+            console.log('Whitebox tab content initialized');
+        }
+        
+        // Make sure leaderboard container exists
+        const leaderboardList = document.getElementById('leaderboardList');
+        if (leaderboardList) {
+            leaderboardList.style.display = 'block';
+        }
+        
+        // Initialize tabs if not already done
+        if (!document.querySelector('.tab').hasListener) {
+            document.querySelectorAll('.tab').forEach(tab => {
+                if (!tab.hasListener) {
+                    tab.addEventListener('click', function() {
+                        // Remove active class from all tabs and content
+                        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                        document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                        
+                        // Add active class to clicked tab
+                        this.classList.add('active');
+                        
+                        // Show corresponding content
+                        const tabId = this.dataset.tab;
+                        const tabContent = document.getElementById('tab-' + tabId);
+                        if (tabContent) {
+                            tabContent.classList.add('active');
+                            console.log('Switched to tab:', tabId);
+                        }
+                    });
+                    tab.hasListener = true;
+                }
+            });
+        }
+        
+        // Predict tab: generate inputs
+        const form = document.getElementById('predictForm');
+        if (form) {
+            form.innerHTML = '';
+
+            features.forEach(f => {
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.alignItems = 'center';
+                row.style.marginBottom = '8px';
+                row.style.gap = '10px';
+
+                const label = document.createElement('label');
+                label.textContent = f;
+                label.style.fontWeight = 'bold';
+                label.style.width = '200px';
+
+                row.appendChild(label);
+
+                const catValues = (categories && categories[f]) || null;
+
+                if (catValues && catValues.length > 0) {
+                    const select = document.createElement('select');
+                    select.name = f;
+                    select.style.flex = '1';
+                    catValues.forEach(val => {
+                        const opt = document.createElement('option');
+                        opt.value = val;
+                        opt.textContent = val;
+                        select.appendChild(opt);
+                    });
+                    row.appendChild(select);
+                } else {
+                    const input = document.createElement('input');
+                    input.name = f;
+                    input.placeholder = sampleRow && sampleRow[f] ? sampleRow[f] : 'e.g. ...';
+                    input.style.flex = '1';
+                    row.appendChild(input);
+                }
+
+                form.appendChild(row);
+            });
+        }
+
+        // Model info tab
+        const modelFeatures = document.getElementById('modelFeatures');
+        if (modelFeatures) modelFeatures.textContent = features.join(', ');
+        
+        const modelTarget = document.getElementById('modelTarget');
+        if (modelTarget) modelTarget.textContent = target;
+        
+        const fiList = document.getElementById('featureImportance');
+        if (fiList) {
+            fiList.innerHTML = '';
+            if (importance && Array.isArray(importance)) {
+                importance.forEach(([name, perc]) => {
+                    const li = document.createElement('li');
+                    li.textContent = name + ': ' + perc + '%';
+                    fiList.appendChild(li);
+                });
+            } else {
+                fiList.innerHTML = '<li>No feature importance data available</li>';
+            }
+        }
+        
+        const modelAlgorithm = document.getElementById('modelAlgorithm');
+        if (modelAlgorithm) modelAlgorithm.textContent = algorithm;
+        
+        const modelSizeEl = document.getElementById('modelSize');
+        if (modelSizeEl) modelSizeEl.textContent = modelSize + ' KB';
+        
+        // Data tab preview
+        if (csvDownloadUrl) {
+            fetch(csvDownloadUrl)
+                .then(res => res.text())
+                .then(text => {
+                    const dataPreview = document.getElementById('dataPreview');
+                    if (!dataPreview) return;
+                    
+                    const rows = text.split('\n').slice(0, 11).map(r => r.split(','));
+                    let table = '<table><thead><tr>';
+                    rows[0].forEach(h => {
+                        if(h === target) table += `<th class="highlight-target">${h}</th>`; 
+                        else table += `<th>${h}</th>`;
+                    });
+                    table += '</tr></thead><tbody>';
+                    rows.slice(1).forEach(r => {
+                        table += '<tr>';
+                        r.forEach((cell, idx) => {
+                            const header = rows[0][idx];
+                            if(header === target) table += `<td class="highlight-target">${cell}</td>`; 
+                            else table += `<td>${cell}</td>`;
+                        });
+                        table += '</tr>';
+                    });
+                    table += '</tbody></table>';
+                    dataPreview.innerHTML = table;
+                })
+                .catch(err => {
+                    console.error('Failed to load data preview:', err);
+                    const dataPreview = document.getElementById('dataPreview');
+                    if (dataPreview) {
+                        dataPreview.innerHTML = '<p>Unable to load data preview</p>';
+                    }
+                });
+        }
+        
+        const downloadDataset = document.getElementById('downloadDataset');
+        if (downloadDataset) {
+            downloadDataset.onclick = () => { window.location = csvDownloadUrl; };
+        }
+        
+        // API tab
+        const apiExample = document.getElementById('apiExample');
+        if (apiExample) {
+            apiExample.textContent = buildCurlExample(base(), state.model.apiKey, state.model.id);
+        }
+        
+        // WHITEBOX TAB: Initialize with help text if no data yet
+        const whiteboxHelp = document.getElementById('whiteboxHelp');
+        if (whiteboxHelp) {
+            whiteboxHelp.innerHTML = `
+                <p>This shows each algorithm evaluated during training and its validation score.</p>
+                <p>The best model is highlighted in yellow.</p>
+                <p>Click on any model to see detailed information.</p>
+            `;
+        }
+        
+        console.log('showModelTabs completed - all tabs initialized');
+    }
+    // function showModelTabs(features, target, algorithm, modelSize, importance, sampleRow, csvDownloadUrl, categories) {
+    //     const modelTabs = document.getElementById('modelTabs');
+    //     if (modelTabs) modelTabs.style.display = 'block';
+        
+    //     // Predict tab: generate inputs
+    //     const form = document.getElementById('predictForm');
+    //     if (form) {
+    //         form.innerHTML = '';
+
+    //         features.forEach(f => {
+    //             const row = document.createElement('div');
+    //             row.style.display = 'flex';
+    //             row.style.alignItems = 'center';
+    //             row.style.marginBottom = '8px';
+    //             row.style.gap = '10px';
+
+    //             const label = document.createElement('label');
+    //             label.textContent = f;
+    //             label.style.fontWeight = 'bold';
+    //             label.style.width = '200px';
+
+    //             row.appendChild(label);
+
+    //             const catValues = (categories && categories[f]) || null;
+
+    //             if (catValues && catValues.length > 0) {
+    //                 const select = document.createElement('select');
+    //                 select.name = f;
+    //                 select.style.flex = '1';
+    //                 catValues.forEach(val => {
+    //                     const opt = document.createElement('option');
+    //                     opt.value = val;
+    //                     opt.textContent = val;
+    //                     select.appendChild(opt);
+    //                 });
+    //                 row.appendChild(select);
+    //             } else {
+    //                 const input = document.createElement('input');
+    //                 input.name = f;
+    //                 input.placeholder = sampleRow && sampleRow[f] ? sampleRow[f] : 'e.g. ...';
+    //                 input.style.flex = '1';
+    //                 row.appendChild(input);
+    //             }
+
+    //             form.appendChild(row);
+    //         });
+    //     }
+
+    //     // Model info tab
+    //     const modelFeatures = document.getElementById('modelFeatures');
+    //     if (modelFeatures) modelFeatures.textContent = features.join(', ');
+        
+    //     const modelTarget = document.getElementById('modelTarget');
+    //     if (modelTarget) modelTarget.textContent = target;
+        
+    //     const fiList = document.getElementById('featureImportance');
+    //     if (fiList) {
+    //         fiList.innerHTML = '';
+    //         importance.forEach(([name, perc]) => {
+    //             const li = document.createElement('li');
+    //             li.textContent = name + ': ' + perc + '%';
+    //             fiList.appendChild(li);
+    //         });
+    //     }
+        
+    //     const modelAlgorithm = document.getElementById('modelAlgorithm');
+    //     if (modelAlgorithm) modelAlgorithm.textContent = algorithm;
+        
+    //     const modelSizeEl = document.getElementById('modelSize');
+    //     if (modelSizeEl) modelSizeEl.textContent = modelSize + ' KB';
+        
+    //     // Data tab preview
+    //     if (csvDownloadUrl) {
+    //         fetch(csvDownloadUrl)
+    //             .then(res => res.text())
+    //             .then(text => {
+    //                 const dataPreview = document.getElementById('dataPreview');
+    //                 if (!dataPreview) return;
+                    
+    //                 const rows = text.split('\n').slice(0, 11).map(r => r.split(','));
+    //                 let table = '<table><thead><tr>';
+    //                 rows[0].forEach(h => {
+    //                     if(h === target) table += `<th class="highlight-target">${h}</th>`; 
+    //                     else table += `<th>${h}</th>`;
+    //                 });
+    //                 table += '</tr></thead><tbody>';
+    //                 rows.slice(1).forEach(r => {
+    //                     table += '<tr>';
+    //                     r.forEach((cell, idx) => {
+    //                         const header = rows[0][idx];
+    //                         if(header === target) table += `<td class="highlight-target">${cell}</td>`; 
+    //                         else table += `<td>${cell}</td>`;
+    //                     });
+    //                     table += '</tr>';
+    //                 });
+    //                 table += '</tbody></table>';
+    //                 dataPreview.innerHTML = table;
+    //             });
+    //     }
+        
+    //     const downloadDataset = document.getElementById('downloadDataset');
+    //     if (downloadDataset) {
+    //         downloadDataset.onclick = () => { window.location = csvDownloadUrl; };
+    //     }
+        
+    //     // API tab
+    //     const apiExample = document.getElementById('apiExample');
+    //     if (apiExample) {
+    //         apiExample.textContent = buildCurlExample(base(), state.model.apiKey, state.model.id);
+    //     }
+    // }
+
+    // ============================
+    // NLP Domain Detection Logic
+    // ============================
+    let typingTimer;
+    
+    async function autoDetectDomain() {
+        const scenario = $('#scenario');
+        if (!scenario) return;
+        
+        const scenarioText = scenario.value.trim();
+        if (!scenarioText) return;
+
+        log("Analyzing scenario with NLP...");
+        try {
+            const res = await fetch(base() + '/api/nlp/domain-detect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scenario: scenarioText })
+            });
+            
+            const data = await res.json();
+
+            if (data.corrected_scenario) {
+                scenario.value = data.corrected_scenario;
+                const scenarioFeedback = $('#scenarioFeedback');
+                if (scenarioFeedback) scenarioFeedback.textContent = "Auto-corrected grammar & spelling.";
+            }
+
+            if (data.suggested_domain) {
+                const domain = $('#domain');
+                if (domain) domain.value = data.suggested_domain;
+                
+                const suggestedDomain = $('#suggestedDomain');
+                if (suggestedDomain) suggestedDomain.textContent = "Suggested domain: " + data.suggested_domain;
+                
+                const thumbUp = $('#thumbUp');
+                const thumbDown = $('#thumbDown');
+                if (thumbUp) thumbUp.style.display = 'inline';
+                if (thumbDown) thumbDown.style.display = 'inline';
+            }
+
+        } catch (e) {
+            log("Domain NLP error: " + e.message);
+        }
+    }
+
+    // ============================
+    // Initialize Application
+    // ============================
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Initializing AutoML Studio...');
+        
+        // Initialize wizard navigation
+        showStep(1);
+        
+        // Initialize UI state
+        resetUI();
+        
+        // Initialize file upload handlers
+        const dropzone = $('#dropzone');
+        const fileInput = $('#fileInput');
+        const browse = $('#browse');
+
+        if (browse && fileInput) {
+            browse.addEventListener('click', (e) => { 
+                e.preventDefault(); 
+                fileInput.click(); 
+            });
+        }
+
+        if (dropzone) {
+            ['dragenter','dragover'].forEach(evt => 
+                dropzone.addEventListener(evt, e => {
+                    e.preventDefault(); 
+                    dropzone.classList.add('dragover'); 
+                })
+            );
+            
+            ['dragleave','drop'].forEach(evt => 
+                dropzone.addEventListener(evt, e => { 
+                    e.preventDefault();
+                    dropzone.classList.remove('dragover'); 
+                })
+            );
+
+            dropzone.addEventListener('drop', (e) => {
+                const f = e.dataTransfer.files?.[0]; 
+                if (f) handleFile(f);
+            });
+        }
+
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => { 
+                const f = e.target.files?.[0]; 
+                if (f) handleFile(f); 
+            });
+        }
+
+        // Initialize target selection
+        const targetSelect = $('#targetSelect');
+        if (targetSelect) {
+            targetSelect.addEventListener('change', (e) => {
+                state.target = e.target.value; 
+                if (!state.target) return;
+                
+                const pt = guessProblemType(state.rows, state.headers, state.target);
+                state.problemType = pt;
+                
+                const problemType = $('#problemType');
+                if (problemType) {
+                    problemType.disabled = false; 
+                    problemType.value = pt;
+                }
+                
+                setBadge($('#detectBadge'), pt ? `Detected: ${pt}` : 'Not detected', pt ? 'good' : 'warn');
+                
+                // Update step 2 with the same values
+                const targetSelect2 = $('#targetSelect2');
+                if (targetSelect2) {
+                    targetSelect2.innerHTML = targetSelect.innerHTML;
+                    targetSelect2.value = state.target;
+                    targetSelect2.disabled = false;
+                }
+                
+                const problemType2 = $('#problemType2');
+                if (problemType2) {
+                    problemType2.value = state.problemType;
+                    problemType2.disabled = false;
+                }
+                
+                enableActions();
+                autoNavigateToRelevantStep();
+            });
+        }
+
+        // Initialize problem type change
+        const problemType = $('#problemType');
+        if (problemType) {
+            problemType.addEventListener('change', (e) => { 
+                state.problemType = e.target.value; 
+                enableActions(); 
+            });
+        }
+
+        // Initialize training button
+        const trainBtn = $('#trainBtn');
+        if (trainBtn) {
+            trainBtn.addEventListener('click', async () => { 
+                await saveMetadata();
+                await train(); 
+            });
+        }
+
+        // Initialize other buttons
+        const resetBtn = $('#resetBtn');
+        if (resetBtn) resetBtn.addEventListener('click', () => { resetUI(); });
+        
+        const pingBtn = $('#pingBtn');
+        if (pingBtn) pingBtn.addEventListener('click', ping);
+        
+        const saveMetaBtn = $('#saveMetaBtn');
+        if (saveMetaBtn) saveMetaBtn.addEventListener('click', saveMetadata);
+        
+        const copyCurl = $('#copyCurl');
+        if (copyCurl) {
+            copyCurl.addEventListener('click', () => { 
+                const text = buildCurlExample(base(), state.model.apiKey, state.model.id); 
+                navigator.clipboard.writeText(text).then(() => { log('Predict cURL copied to clipboard.'); }); 
+            });
+        }
+
+        // Initialize predict button
+        const predictBtn = document.getElementById('predictBtn');
+        if (predictBtn) {
+            predictBtn.addEventListener('click', e => {
+                e.preventDefault();
+                const form = document.getElementById('predictForm');
+                if (!form) return;
+                
+                const formData = new FormData(form);
+                const record = {};
+                formData.forEach((val, key) => { record[key] = val; });
+
+                fetch(base() + '/api/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + state.model.apiKey
+                    },
+                    body: JSON.stringify({ model_id: state.model.id, records: [record] })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    const targetCol = state.target || "Prediction";
+                    const resultVal = Array.isArray(data.predictions) ? data.predictions[0] : data.predictions;
+                    const predictResult = document.getElementById('predictResult');
+                    if (predictResult) predictResult.textContent = `${targetCol}: ${resultVal}`;
+                });
+            });
+        }
+
+        // Initialize advance button
+        const advanceBtn = document.getElementById('advanceBtn');
+        if (advanceBtn) {
+            advanceBtn.addEventListener('click', () => {
+                const payload = {
+                    basic_model_id: state.model.id,
+                    problem_type: state.problemType,
+                    target: state.target,
+                    features: state.headers,
+                };
+                sessionStorage.setItem('advance_ctx', JSON.stringify(payload));
+                window.location.href = 'advance.html';
+            });
+        }
+
+        // Initialize NLP domain detection
+        const scenarioInput = $('#scenario');
+        if (scenarioInput) {
+            scenarioInput.addEventListener('input', () => {
+                clearTimeout(typingTimer);
+                typingTimer = setTimeout(() => autoDetectDomain(), 1000);
+            });
+        }
+
+        // Initialize missing value popup
+        const confirmMissing = document.getElementById('confirmMissing');
+        if (confirmMissing) {
+            confirmMissing.addEventListener('click', () => {
+                const missingStrategy = document.getElementById('missingStrategy');
+                if (missingStrategy) {
+                    state.missingStrategy = missingStrategy.value;
+                }
+                const missingPopup = document.getElementById('missingPopup');
+                if (missingPopup) missingPopup.style.display = 'none';
+            });
+        }
+
+        // Initialize tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                tab.classList.add('active');
+                const tabContent = document.getElementById('tab-' + tab.dataset.tab);
+                if (tabContent) tabContent.classList.add('active');
+            });
+        });
+
+        console.log('AutoML Studio initialized successfully');
+    });
+</script> -->
+
+
